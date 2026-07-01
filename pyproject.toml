@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kitchen-chat-mcp"
+version = "0.1.0"
+description = "Inter-session communication MCP server for Claude Code (Kuechengespraeche)"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+kitchen-talk = "kitchen_chat_mcp.ui.server:main"
+
+[tool.setuptools.packages.find]
+include = ["kitchen_chat_mcp*"]
