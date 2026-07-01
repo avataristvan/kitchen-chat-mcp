@@ -6,6 +6,7 @@ from kitchen_chat_mcp.application.AnswerQuestionUseCase import AnswerQuestionUse
 from kitchen_chat_mcp.application.AskQuestionUseCase import AskQuestionUseCase, AskTimeoutError
 from kitchen_chat_mcp.application.PollMessagesUseCase import PollMessagesUseCase
 from kitchen_chat_mcp.application.PublishMessageUseCase import PublishMessageUseCase
+from kitchen_chat_mcp.application.PublishPresenceUseCase import PublishPresenceUseCase
 from kitchen_chat_mcp.domain.Message import Message, MessageKind
 from kitchen_chat_mcp.domain.Room import RoomInvariantError
 from tests.fakes import InMemoryMessageStore
@@ -25,6 +26,18 @@ class TestPublishAndPoll(unittest.TestCase):
 
         only_second = poll.execute("kitchen", since_seq=all_messages[0][0])
         self.assertEqual([msg.id for _, msg in only_second], [second.id])
+
+
+class TestPublishPresence(unittest.TestCase):
+    def test_presence_message_has_presence_kind_and_is_stored(self):
+        store = InMemoryMessageStore()
+        publish_presence = PublishPresenceUseCase(store)
+
+        message = publish_presence.execute("kitchen", "session-a", "still here, nothing new")
+
+        self.assertEqual(message.kind, MessageKind.PRESENCE)
+        stored = store.poll("kitchen", since_seq=0)
+        self.assertEqual([msg.id for _, msg in stored], [message.id])
 
 
 class TestAnswerQuestion(unittest.TestCase):

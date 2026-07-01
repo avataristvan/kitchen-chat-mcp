@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 python -m kitchen_chat_mcp                              # run the MCP server (stdio transport), from repo root
-python -m unittest discover -s tests -v                  # run the test suite (24 tests), from repo root
+python -m unittest discover -s tests -v                  # run the test suite (26 tests), from repo root
 ```
 
 `kitchen_chat_mcp/__main__.py` calls `ui/server.py:main()`, which runs `FastMCP.run()`.
@@ -21,11 +21,12 @@ python -m unittest discover -s tests -v                  # run the test suite (2
 ui → application → domain ← infrastructure
 ```
 
-- `domain/Message.py` — `Message` (frozen dataclass: `room`, `sender_session_id`, `kind`, `content`, `in_reply_to`, `id`, `created_at`), `MessageKind` enum (`BROADCAST`, `QUESTION`, `ANSWER`).
+- `domain/Message.py` — `Message` (frozen dataclass: `room`, `sender_session_id`, `kind`, `content`, `in_reply_to`, `id`, `created_at`), `MessageKind` enum (`BROADCAST`, `QUESTION`, `ANSWER`, `PRESENCE`).
 - `domain/MessageStore.py` — abstract store interface: `append`, `poll`, `get`, `find_answers`.
 - `domain/Room.py` — `RoomInvariantError`; `Room.ensure_can_answer(question, existing_answers)` enforces that a question exists, belongs to the room, is actually a `QUESTION`, and has no existing answer.
 - `application/PublishMessageUseCase.py` — `PublishMessageUseCase.execute(room, sender_session_id, content)`: appends a `BROADCAST` message.
-- `application/PollMessagesUseCase.py` — `PollMessagesUseCase.execute(room, since_seq)`: delegates to `store.poll`.
+- `application/PublishPresenceUseCase.py` — `PublishPresenceUseCase.execute(room, sender_session_id, content)`: appends a `PRESENCE` message (low-priority ping, e.g. "still here, nothing new"), kept distinct from real content so it doesn't drown out `BROADCAST`/`QUESTION`/`ANSWER` in a busy room.
+- `application/PollMessagesUseCase.py` — `PollMessagesUseCase.execute(room, since_seq)`: delegates to `store.poll`; presence filtering happens in `ui/server.py`, not here (a display concern, not a domain rule).
 - `application/AskQuestionUseCase.py` — `AskQuestionUseCase.execute(room, sender_session_id, question, timeout_seconds)`; appends a `QUESTION` message, then polls `find_answers` every `poll_interval_seconds` (default `0.5`) until an answer appears or `timeout_seconds` elapses, raising `AskTimeoutError`.
 - `application/AnswerQuestionUseCase.py` — `AnswerQuestionUseCase.execute(room, sender_session_id, question_id, reply)`; loads the question and existing answers, checks `Room.ensure_can_answer`, then appends an `ANSWER` message.
 - `infrastructure/SqliteMessageStore.py` — WAL-mode SQLite `MessageStore` implementation, no server process. A partial unique index (`in_reply_to IS NOT NULL`) enforces "at most one answer per question" at the storage layer, closing the check-then-append race between `AnswerQuestionUseCase`'s read and its write — a second concurrent answer gets `sqlite3.IntegrityError`, translated to `RoomInvariantError`.
@@ -45,14 +46,15 @@ ui → application → domain ← infrastructure
 
 ## MCP tools
 
-All four tools live in `kitchen_chat_mcp/ui/server.py`. Every tool first calls `allowlist.ensure_allowed(room)` and returns `{"status": "denied", "reason": ...}` if the room isn't in a configured allowlist.
+All five tools live in `kitchen_chat_mcp/ui/server.py`. Every tool first calls `allowlist.ensure_allowed(room)` and returns `{"status": "denied", "reason": ...}` if the room isn't in a configured allowlist.
 
 | Tool | Signature | `status` values |
 |---|---|---|
 | `publish` | `publish(room: str, sender_session_id: str, content: str) -> dict` | `ok` (+ `message_id`) — broadcast stored; `denied` (+ `reason`) — room not allowed. |
-| `poll` | `poll(room: str, since_seq: int = 0) -> dict` | `ok` (+ `messages`: list of `{seq, id, sender_session_id, kind, content, in_reply_to, created_at}`) — messages after `since_seq`; `denied` (+ `reason`) — room not allowed. |
+| `poll` | `poll(room: str, since_seq: int = 0, include_presence: bool = False) -> dict` | `ok` (+ `messages`: list of `{seq, id, sender_session_id, kind, content, in_reply_to, created_at}`) — messages after `since_seq`, excluding `PRESENCE` messages unless `include_presence=True`; `denied` (+ `reason`) — room not allowed. |
 | `ask` | `ask(room: str, sender_session_id: str, question: str, timeout_seconds: float = 30.0) -> dict` | `answered` (+ `content`, `sender_session_id`) — a reply arrived in time; `timeout` (+ `question`) — no reply within `timeout_seconds`; `denied` (+ `reason`) — room not allowed. |
 | `answer` | `answer(room: str, sender_session_id: str, question_id: str, reply: str) -> dict` | `ok` (+ `message_id`) — answer stored; `rejected` (+ `reason`) — question doesn't exist, isn't a question, belongs to another room, or is already answered (`RoomInvariantError`); `denied` (+ `reason`) — room not allowed. |
+| `presence` | `presence(room: str, sender_session_id: str, content: str) -> dict` | `ok` (+ `message_id`) — presence ping stored; `denied` (+ `reason`) — room not allowed. Use for low-priority "still here"/"nothing new" pings from a scheduled/cron poll loop, so they don't clutter `poll`'s default output. |
 
 ## Concept & rationale
 

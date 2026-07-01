@@ -6,6 +6,8 @@ from kitchen_chat_mcp.application.AnswerQuestionUseCase import AnswerQuestionUse
 from kitchen_chat_mcp.application.AskQuestionUseCase import AskQuestionUseCase, AskTimeoutError
 from kitchen_chat_mcp.application.PollMessagesUseCase import PollMessagesUseCase
 from kitchen_chat_mcp.application.PublishMessageUseCase import PublishMessageUseCase
+from kitchen_chat_mcp.application.PublishPresenceUseCase import PublishPresenceUseCase
+from kitchen_chat_mcp.domain.Message import MessageKind
 from kitchen_chat_mcp.domain.Room import RoomInvariantError
 from kitchen_chat_mcp.infrastructure.RoomAllowlist import RoomAccessDenied, RoomAllowlist
 from kitchen_chat_mcp.infrastructure.SqliteMessageStore import SqliteMessageStore
@@ -47,14 +49,16 @@ def publish(room: str, sender_session_id: str, content: str) -> dict:
 
 
 @mcp.tool()
-def poll(room: str, since_seq: int = 0) -> dict:
-    """Fetch messages in a room posted after since_seq. Returns status 'ok' with a list of messages, or 'denied' if the room is not allowed."""
+def poll(room: str, since_seq: int = 0, include_presence: bool = False) -> dict:
+    """Fetch messages in a room posted after since_seq. Presence pings are excluded by default (set include_presence=True to see them) so they don't drown out real content. Returns status 'ok' with a list of messages, or 'denied' if the room is not allowed."""
     try:
         _get_allowlist().ensure_allowed(room)
     except RoomAccessDenied as e:
         return {"status": "denied", "reason": str(e)}
 
     messages = PollMessagesUseCase(_get_store()).execute(room, since_seq)
+    if not include_presence:
+        messages = [(seq, message) for seq, message in messages if message.kind is not MessageKind.PRESENCE]
     return {
         "status": "ok",
         "messages": [
@@ -70,6 +74,18 @@ def poll(room: str, since_seq: int = 0) -> dict:
             for seq, message in messages
         ],
     }
+
+
+@mcp.tool()
+def presence(room: str, sender_session_id: str, content: str) -> dict:
+    """Post a low-priority presence ping (e.g. 'still here, nothing new') to a room, kept separate from real content via kind='presence'. Excluded from poll() by default. Returns status 'ok' with message_id, or 'denied' if the room is not allowed."""
+    try:
+        _get_allowlist().ensure_allowed(room)
+    except RoomAccessDenied as e:
+        return {"status": "denied", "reason": str(e)}
+
+    message = PublishPresenceUseCase(_get_store()).execute(room, sender_session_id, content)
+    return {"status": "ok", "message_id": message.id}
 
 
 @mcp.tool()

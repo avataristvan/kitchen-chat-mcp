@@ -40,6 +40,23 @@ class TestPublishAndPoll(KitchenChatIntegrationTestCase):
         self.assertEqual(result["messages"][0]["content"], "Script finalisiert")
 
 
+class TestPresence(KitchenChatIntegrationTestCase):
+    def test_poll_excludes_presence_by_default_but_can_include_it(self):
+        broadcast = server.publish("kitchen", "session-a", "Script finalisiert")
+        ping = server.presence("kitchen", "session-b", "still here, nothing new")
+        self.assertEqual(ping["status"], "ok")
+
+        default_result = server.poll("kitchen")
+        self.assertEqual([msg["id"] for msg in default_result["messages"]], [broadcast["message_id"]])
+
+        with_presence = server.poll("kitchen", include_presence=True)
+        self.assertEqual(
+            [msg["id"] for msg in with_presence["messages"]],
+            [broadcast["message_id"], ping["message_id"]],
+        )
+        self.assertEqual(with_presence["messages"][1]["kind"], "presence")
+
+
 class TestAskAnswerRoundTrip(KitchenChatIntegrationTestCase):
     def test_ask_is_answered_by_another_session(self):
         ask_result = {}

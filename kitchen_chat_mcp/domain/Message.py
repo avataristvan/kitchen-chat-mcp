@@ -8,6 +8,7 @@ class MessageKind(Enum):
     BROADCAST = "broadcast"
     QUESTION = "question"
     ANSWER = "answer"
+    PRESENCE = "presence"
 
 
 @dataclass(frozen=True)
