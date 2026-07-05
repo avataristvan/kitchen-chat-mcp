@@ -163,6 +163,16 @@ class TestSqliteMessageStore(unittest.TestCase):
         all_messages = self.store.poll("kitchen", since_seq=0)
         self.assertEqual(len(all_messages), 3)
 
+    def test_list_rooms_returns_distinct_rooms_most_recently_active_first(self):
+        self.store.append(Message(room="kitchen", sender_session_id="a", kind=MessageKind.BROADCAST, content="1"))
+        self.store.append(Message(room="living-room", sender_session_id="a", kind=MessageKind.BROADCAST, content="2"))
+        self.store.append(Message(room="kitchen", sender_session_id="a", kind=MessageKind.BROADCAST, content="3"))
+
+        self.assertEqual(self.store.list_rooms(), ["kitchen", "living-room"])
+
+    def test_list_rooms_is_empty_when_no_messages_exist(self):
+        self.assertEqual(self.store.list_rooms(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

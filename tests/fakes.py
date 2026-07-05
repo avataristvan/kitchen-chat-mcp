@@ -24,3 +24,9 @@ class InMemoryMessageStore(MessageStore):
 
     def find_answers(self, room: str, question_id: str) -> list[Message]:
         return [msg for _, msg in self._entries if msg.room == room and msg.in_reply_to == question_id]
+
+    def list_rooms(self) -> list[str]:
+        seen: dict[str, int] = {}
+        for seq, msg in self._entries:
+            seen[msg.room] = seq
+        return [room for room, _ in sorted(seen.items(), key=lambda item: item[1], reverse=True)]

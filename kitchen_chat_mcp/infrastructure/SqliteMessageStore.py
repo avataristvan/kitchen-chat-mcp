@@ -129,3 +129,18 @@ class SqliteMessageStore(MessageStore):
             return [self._row_to_message(row) for row in rows]
         finally:
             connection.close()
+
+    def list_rooms(self) -> list[str]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT room
+                FROM messages
+                GROUP BY room
+                ORDER BY MAX(seq) DESC
+                """
+            ).fetchall()
+            return [row[0] for row in rows]
+        finally:
+            connection.close()

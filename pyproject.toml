@@ -9,10 +9,12 @@ description = "Inter-session communication MCP server for Claude Code (Kuechenge
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0.0",
+    "textual>=0.60",
 ]
 
 [project.scripts]
 kitchen-talk = "kitchen_chat_mcp.ui.server:main"
+kitchen-talk-cli = "kitchen_chat_mcp.ui.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["kitchen_chat_mcp*"]

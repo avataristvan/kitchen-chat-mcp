@@ -19,3 +19,7 @@ class MessageStore(ABC):
     @abstractmethod
     def find_answers(self, room: str, question_id: str) -> list[Message]:
         """Return all messages in the room that reply to question_id."""
+
+    @abstractmethod
+    def list_rooms(self) -> list[str]:
+        """Return distinct room names that have at least one message, most recently active first."""
