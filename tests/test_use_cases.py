@@ -4,11 +4,14 @@ import unittest
 
 from kitchen_chat_mcp.application.AnswerQuestionUseCase import AnswerQuestionUseCase
 from kitchen_chat_mcp.application.AskQuestionUseCase import AskQuestionUseCase, AskTimeoutError
+from kitchen_chat_mcp.application.ListRoomsUseCase import ListRoomsUseCase
 from kitchen_chat_mcp.application.PollMessagesUseCase import PollMessagesUseCase
 from kitchen_chat_mcp.application.PublishMessageUseCase import PublishMessageUseCase
 from kitchen_chat_mcp.application.PublishPresenceUseCase import PublishPresenceUseCase
+from kitchen_chat_mcp.application.SubscribeUseCase import SubscribeUseCase
 from kitchen_chat_mcp.domain.Message import Message, MessageKind
 from kitchen_chat_mcp.domain.Room import RoomInvariantError
+from kitchen_chat_mcp.domain.SubscriptionRegistry import SubscriptionRegistry
 from tests.fakes import InMemoryMessageStore
 
 
@@ -38,6 +41,15 @@ class TestPublishPresence(unittest.TestCase):
         self.assertEqual(message.kind, MessageKind.PRESENCE)
         stored = store.poll("kitchen", since_seq=0)
         self.assertEqual([msg.id for _, msg in stored], [message.id])
+
+
+class TestListRooms(unittest.TestCase):
+    def test_returns_distinct_rooms_seen_by_the_store(self):
+        store = InMemoryMessageStore()
+        PublishMessageUseCase(store).execute("kitchen", "session-a", "hi")
+        PublishMessageUseCase(store).execute("living-room", "session-b", "hi")
+
+        self.assertEqual(ListRoomsUseCase(store).execute(), ["living-room", "kitchen"])
 
 
 class TestAnswerQuestion(unittest.TestCase):
@@ -86,6 +98,28 @@ class TestAskQuestion(unittest.TestCase):
 
         with self.assertRaises(AskTimeoutError):
             ask_use_case.execute("kitchen", "session-a", "Brauchen wir OCR-Nachdreh?", timeout_seconds=0.3)
+
+
+class TestSubscribe(unittest.TestCase):
+    def test_registers_a_subscription_for_a_specific_kind(self):
+        registry = SubscriptionRegistry()
+        subscribe = SubscribeUseCase(registry)
+
+        subscription = subscribe.execute("kitchen", MessageKind.QUESTION)
+
+        self.assertEqual(subscription.room, "kitchen")
+        self.assertEqual(subscription.kind, MessageKind.QUESTION)
+        self.assertEqual(registry.all(), [subscription])
+
+    def test_registers_a_wildcard_subscription_when_kind_is_none(self):
+        registry = SubscriptionRegistry()
+        subscribe = SubscribeUseCase(registry)
+
+        subscription = subscribe.execute("kitchen", None)
+
+        self.assertEqual(subscription.room, "kitchen")
+        self.assertIsNone(subscription.kind)
+        self.assertEqual(registry.all(), [subscription])
 
 
 if __name__ == "__main__":

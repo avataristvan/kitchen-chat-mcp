@@ -5,6 +5,7 @@ import time
 import unittest
 from unittest.mock import patch
 
+from kitchen_chat_mcp.domain.SubscriptionRegistry import SubscriptionRegistry
 from kitchen_chat_mcp.infrastructure.RoomAllowlist import RoomAllowlist
 from kitchen_chat_mcp.infrastructure.SqliteMessageStore import SqliteMessageStore
 from kitchen_chat_mcp.ui import server
@@ -16,12 +17,15 @@ class KitchenChatIntegrationTestCase(unittest.TestCase):
         db_path = os.path.join(self._tmp_dir.name, "test-kitchen-chat.db")
         self._store_patcher = patch.object(server, "store", SqliteMessageStore(db_path))
         self._allowlist_patcher = patch.object(server, "allowlist", RoomAllowlist())
+        self._subscriptions_patcher = patch.object(server, "subscriptions", SubscriptionRegistry())
         self._store_patcher.start()
         self._allowlist_patcher.start()
+        self._subscriptions_patcher.start()
 
     def tearDown(self):
         self._store_patcher.stop()
         self._allowlist_patcher.stop()
+        self._subscriptions_patcher.stop()
         self._tmp_dir.cleanup()
 
 
@@ -85,6 +89,34 @@ class TestAskTimeout(KitchenChatIntegrationTestCase):
     def test_ask_times_out_when_unanswered(self):
         result = server.ask("kitchen", "session-a", "Brauchen wir OCR-Nachdreh?", timeout_seconds=0.3)
         self.assertEqual(result, {"status": "timeout", "question": "Brauchen wir OCR-Nachdreh?"})
+
+
+class TestSubscribe(KitchenChatIntegrationTestCase):
+    def test_subscribe_with_valid_kind_returns_ok(self):
+        result = server.subscribe("kitchen", "question")
+        self.assertEqual(result, {"status": "ok"})
+
+    def test_subscribe_with_no_kind_returns_ok(self):
+        result = server.subscribe("kitchen", None)
+        self.assertEqual(result, {"status": "ok"})
+
+    def test_subscribe_with_invalid_kind_is_rejected(self):
+        result = server.subscribe("kitchen", "not-a-real-kind")
+        self.assertEqual(result["status"], "rejected")
+
+    def test_subscribe_to_room_outside_allowlist_is_denied(self):
+        previous_rooms = os.environ.get("ROOMS")
+        os.environ["ROOMS"] = "kitchen"
+        try:
+            with patch.object(server, "allowlist", RoomAllowlist()):
+                result = server.subscribe("garage", "question")
+        finally:
+            if previous_rooms is None:
+                os.environ.pop("ROOMS", None)
+            else:
+                os.environ["ROOMS"] = previous_rooms
+
+        self.assertEqual(result["status"], "denied")
 
 
 class TestRoomAllowlistDenial(KitchenChatIntegrationTestCase):
