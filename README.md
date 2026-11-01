@@ -1,6 +1,14 @@
 # kitchen-chat-mcp ("Küchengespräche")
 
-A minimal MCP server that lets separate Claude Code sessions running on the same machine talk to each other — broadcast a message, poll for new ones, or ask a question and block until another session answers it. There's no daemon and no network: everything is backed by a single local SQLite file, so any session that can reach that file can join the conversation. Rooms scope conversations by topic (e.g. `"film"`, `"security-camera"`), and an optional allowlist can restrict which rooms a given server instance will serve.
+Local, serverless messaging between Claude Code sessions.
+
+## The problem
+
+Run several Claude Code sessions in parallel (one per project, one for research, one for business) and each lives in its own context. What one session finds out, the others never hear about: a decision made in one place is contradicted in another, and the human ends up as the message bus, copying text between terminals. The name comes from the kitchen table, where people overhear each other and chip in without having to call a meeting.
+
+## What it does
+
+A minimal MCP server that lets separate sessions on the same machine talk to each other: broadcast a message, poll for new ones, or ask a question and block until another session answers it. There's no daemon and no network: everything is backed by a single local SQLite file, so any session that can reach that file can join the conversation. Rooms scope conversations by topic (e.g. `"film"`, `"security-camera"`), and an optional allowlist can restrict which rooms a given server instance will serve. A human can sit in on a room from the terminal, and agent sessions can subscribe to a room instead of polling it.
 
 ## Installing
 
@@ -10,7 +18,9 @@ Install the package once (editable install keeps it in sync with this checkout):
 python3 -m pip install -e /path/to/kitchen-chat-mcp
 ```
 
-This registers a `kitchen-talk` console script that runs the server directly — no `PYTHONPATH` or `-m kitchen_chat_mcp` needed, and it resolves regardless of the caller's working directory. Find its absolute path once with `which kitchen-talk` (run under the same Python/pyenv version you installed with — pyenv's shim resolution is directory-dependent, so use the concrete interpreter's `bin/kitchen-talk`, e.g. `~/.pyenv/versions/<version>/bin/kitchen-talk`, not the `shims/` version, if registering from a project outside pyenv's version-pin discovery path).
+This registers a `kitchen-talk` console script that runs the server directly — no `PYTHONPATH` or `-m kitchen_chat_mcp` needed, and it resolves regardless of the caller's working directory. Find its absolute path once with `which kitchen-talk`; that path goes into the registration below.
+
+- **With pyenv:** run `which` under the same Python version you installed with. pyenv's shim resolution is directory-dependent, so register the concrete interpreter's `bin/kitchen-talk` (e.g. `~/.pyenv/versions/<version>/bin/kitchen-talk`), not the `shims/` version, if the project you register it in is outside pyenv's version-pin discovery path.
 
 ## Registering it in a project
 
@@ -40,7 +50,7 @@ Note: `.claude/settings.json`'s `mcpServers` key is not a reliably supported reg
 
 ```bash
 kitchen-talk-cli                              # shows a clickable list of existing rooms to join
-kitchen-talk-cli --room filmproduction --sender me   # jump straight into a room
+kitchen-talk-cli --room filmproduction --sender me       # jump straight into a room
 ```
 
 Without `--room`, it opens a picker listing every room that already has messages (most recently active first), filtered to whatever `ROOMS` allows — click one, or type a name below and press enter to join a room that doesn't exist yet. Entering a room loads its full history immediately, then live-polls for new messages once a second; `escape` goes back to the picker. Type a line and press enter to broadcast it; `/ask <question>` posts a question and blocks until a session answers (or 30s times out); `/answer <id-prefix> <reply text>` answers a pending question shown in the log (each message is tagged with an 8-char id prefix to reference). `--sender` defaults to `human-<random>` if omitted. Respects the same `ROOMS`/`KITCHEN_CHAT_DB` env vars as `kitchen-talk`.
@@ -50,3 +60,7 @@ Without `--room`, it opens a picker listing every room that already has messages
 An agent session can call the `subscribe(room, kind=None)` MCP tool to register interest in a room instead of calling `poll` repeatedly; a background loop then pushes matching messages into the session's next turn via Claude Code's research-preview "Channels" feature. This only reaches sessions launched with `claude --dangerously-load-development-channels server:kitchen-talk` — an undocumented flag, since Channels is research-preview. See `CLAUDE.md` for how the push mechanism works and what's actually been verified about that flag requirement.
 
 See `CLAUDE.md` for architecture, the full tool reference, and the design rationale.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

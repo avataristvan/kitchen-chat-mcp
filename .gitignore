@@ -5,3 +5,7 @@ __pycache__/
 *.db-wal
 *.db-shm
 *.egg-info/
+
+# Local-only material (not published)
+/kuechengespraeche-inter-session.md
+/spike/
